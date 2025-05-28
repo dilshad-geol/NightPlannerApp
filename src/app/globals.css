@@ -1,0 +1,70 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+}
+
+@layer base {
+  :root {
+    --background: 0 0% 20%; /* Dark Gray #333333 */
+    --foreground: 253 36% 71%; /* Muted Purple #A394D9 */
+
+    --card: 0 0% 23%; /* Slightly lighter dark gray */
+    --card-foreground: 253 36% 71%; /* Muted Purple */
+
+    --popover: 0 0% 18%; /* Darker for popovers */
+    --popover-foreground: 253 36% 71%; /* Muted Purple */
+
+    --primary: 253 36% 71%; /* Muted Purple */
+    --primary-foreground: 0 0% 10%; /* Dark for text on primary */
+
+    --secondary: 0 0% 30%; /* A lighter gray for secondary elements */
+    --secondary-foreground: 253 36% 85%; /* Lighter purple for text on secondary */
+
+    --muted: 0 0% 35%; /* Muted gray */
+    --muted-foreground: 253 20% 60%; /* Desaturated purple */
+
+    --accent: 258 100% 87%; /* Soft Lavender #D1BFFF */
+    --accent-foreground: 0 0% 10%; /* Dark for text on accent */
+
+    --destructive: 0 63% 50%; /* A suitable red for destructive actions */
+    --destructive-foreground: 0 0% 98%; /* Light text for destructive */
+
+    --border: 0 0% 30%;
+    --input: 0 0% 27%;
+    --ring: 258 100% 87%; /* Soft Lavender for focus rings */
+
+    --radius: 0.5rem;
+
+    /* Chart colors can remain or be adjusted if charts are used extensively */
+    --chart-1: 12 76% 61%;
+    --chart-2: 173 58% 39%;
+    --chart-3: 197 37% 24%;
+    --chart-4: 43 74% 66%;
+    --chart-5: 27 87% 67%;
+    
+    /* Sidebar specific colors - might not be heavily used if not using the sidebar component */
+    --sidebar-background: 0 0% 18%;
+    --sidebar-foreground: 253 30% 75%;
+    --sidebar-primary: 258 100% 87%;
+    --sidebar-primary-foreground: 0 0% 10%;
+    --sidebar-accent: 0 0% 25%;
+    --sidebar-accent-foreground: 258 100% 87%;
+    --sidebar-border: 0 0% 30%;
+    --sidebar-ring: 258 100% 87%;
+  }
+
+  /* Remove .dark class specific overrides as the base theme is now dark */
+  /* .dark { ... } */
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
