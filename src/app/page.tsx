@@ -8,8 +8,8 @@ import { ScheduleView } from '@/components/tasks/ScheduleView';
 import { useTaskManager } from '@/hooks/useTaskManager';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Filter, ListTodo, CalendarDays, Loader2, Calendar as CalendarIcon } from 'lucide-react'; // Added CalendarIcon
-import { Calendar } from "@/components/ui/calendar"; // Added Calendar component
+import { Filter, ListTodo, CalendarDays, Loader2, Calendar as CalendarIcon } from 'lucide-react';
+import { Calendar } from "@/components/ui/calendar";
 import {
   Dialog,
   DialogContent,
@@ -25,9 +25,17 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import type { Task, TaskPriority } from '@/lib/types';
+import type { Task, TaskPriority, Recurrence } from '@/lib/types';
 import { useToast } from "@/hooks/use-toast";
 import { parseISO, format } from 'date-fns';
+
+// Helper to map form values to Task's recurrence structure
+const mapFormValuesToRecurrence = (formValues: TaskFormValues): Recurrence | undefined => {
+  if (formValues.recurrenceType === 'none') {
+    return undefined;
+  }
+  return { type: formValues.recurrenceType };
+};
 
 
 export default function PlannerPage() {
@@ -39,31 +47,33 @@ export default function PlannerPage() {
     archiveTask,
     fetchAiTimelineSuggestion,
     getTasksForTomorrow,
-    getTasksForDate // Added getTasksForDate
+    getTasksForDate,
+    getTaskById, // Added to fetch original task for editing
   } = useTaskManager();
   const { toast } = useToast();
   
   const [priorityFilter, setPriorityFilter] = useState<TaskPriority | 'all'>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | 'completed' | 'pending'>('all');
-  const [activeTab, setActiveTab] = useState<string>("tasks"); // For controlling filter visibility
+  const [activeTab, setActiveTab] = useState<string>("tasks"); 
 
-  const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const [editingTask, setEditingTask] = useState<Task | null>(null); // This will hold the task template for editing
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
 
-  const [calendarSelectedDate, setCalendarSelectedDate] = useState<Date>(new Date()); // For Day Schedule tab
+  const [calendarSelectedDate, setCalendarSelectedDate] = useState<Date>(new Date()); 
 
   const tasksForTomorrow = useMemo(() => getTasksForTomorrow(), [getTasksForTomorrow]);
 
   const filteredTasksForTomorrow = useMemo(() => {
-    return tasksForTomorrow
+    return tasksForTomorrow // These are already instances or non-recurring
       .filter(task => priorityFilter === 'all' || task.priority === priorityFilter)
       .filter(task => {
         if (statusFilter === 'all') return true;
-        if (statusFilter === 'completed') return task.isCompleted;
+        // For recurring instances, task.isCompleted is the instance completion status
+        if (statusFilter === 'completed') return task.isCompleted; 
         if (statusFilter === 'pending') return !task.isCompleted;
         return true;
       })
-      .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+      .sort((a, b) => parseISO(a.dueDate).getTime() - parseISO(b.dueDate).getTime());
   }, [tasksForTomorrow, priorityFilter, statusFilter]);
 
   const tasksForCalendarDate = useMemo(() => {
@@ -71,9 +81,18 @@ export default function PlannerPage() {
   }, [getTasksForDate, calendarSelectedDate]);
 
 
-  const handleOpenEditModal = (task: Task) => {
-    setEditingTask(task);
-    setIsEditModalOpen(true);
+  const handleOpenEditModal = (taskToEdit: Task) => {
+    // If it's an instance, we want to edit the original task template.
+    const originalTask = taskToEdit.originalTaskId ? getTaskById(taskToEdit.originalTaskId) : taskToEdit;
+    if (originalTask) {
+      setEditingTask(originalTask);
+      setIsEditModalOpen(true);
+    } else if (taskToEdit.originalTaskId) {
+        toast({ title: "Error", description: "Could not find the original task to edit.", variant: "destructive" });
+    } else {
+        setEditingTask(taskToEdit); // It's already a template or non-recurring
+        setIsEditModalOpen(true);
+    }
   };
 
   const handleCloseEditModal = () => {
@@ -83,12 +102,14 @@ export default function PlannerPage() {
 
   const handleEditTaskFormSubmit = (data: TaskFormValues) => {
     if (editingTask) {
+      const recurrence = mapFormValuesToRecurrence(data);
       updateTask({
-        ...editingTask,
+        ...editingTask, // Spread the original editingTask to keep its ID, createdAt, completedOccurrences etc.
         title: data.title,
         description: data.description || "",
-        dueDate: data.dueDate.toISOString(),
+        dueDate: data.dueDate.toISOString(), // This becomes the new start date for recurrence
         priority: data.priority,
+        recurrence: recurrence || {type: 'none'}, // Update recurrence
       });
       toast({ title: "Task Updated", description: `"${data.title}" has been updated.` });
     }
@@ -96,12 +117,8 @@ export default function PlannerPage() {
   };
 
   const handleAddTaskFormSubmit = (data: TaskFormValues) => {
-     addTask({
-       title: data.title,
-       description: data.description || "",
-       dueDate: data.dueDate.toISOString(),
-       priority: data.priority,
-     });
+     // addTask in useTaskManager now expects TaskFormValues
+     addTask(data);
      toast({ title: "Task Added", description: `"${data.title}" has been added for tomorrow.`});
   };
 
@@ -184,9 +201,8 @@ export default function PlannerPage() {
               <Calendar
                 mode="single"
                 selected={calendarSelectedDate}
-                onSelect={(date) => setCalendarSelectedDate(date || new Date())} // Ensure a date is always set
+                onSelect={(date) => setCalendarSelectedDate(date || new Date())} 
                 className="rounded-md border bg-card shadow-sm"
-                
               />
             </div>
             <div className="flex-1 w-full">
@@ -205,17 +221,18 @@ export default function PlannerPage() {
             <DialogHeader>
               <DialogTitle>Edit Task</DialogTitle>
               <DialogDescription>
-                Make changes to your task details below.
+                Make changes to your task details below. This will update the task template and all its future recurrences.
               </DialogDescription>
             </DialogHeader>
             <TaskForm
               onSubmitSuccess={handleEditTaskFormSubmit}
-              initialData={{
+              initialData={{ // Map editingTask (Task) to TaskForm's initialData structure
                 id: editingTask.id,
                 title: editingTask.title,
                 description: editingTask.description,
                 dueDate: parseISO(editingTask.dueDate), 
                 priority: editingTask.priority,
+                recurrence: editingTask.recurrence, // Pass the recurrence object
               }}
               onCancel={handleCloseEditModal}
               submitButtonText="Update Task"
@@ -226,5 +243,3 @@ export default function PlannerPage() {
     </div>
   );
 }
-
-    

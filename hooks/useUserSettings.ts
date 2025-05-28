@@ -7,10 +7,12 @@ const USER_SETTINGS_KEY = 'nightPlannerUserSettings';
 
 export interface UserSettings {
   defaultTaskTime: string; // HH:mm format, e.g., "09:00"
+  enableEmailAlerts: boolean;
 }
 
 const DEFAULT_SETTINGS: UserSettings = {
   defaultTaskTime: '09:00', // Default to 9 AM
+  enableEmailAlerts: false, // Default to disabled
 };
 
 export function useUserSettings() {
@@ -23,7 +25,9 @@ export function useUserSettings() {
       try {
         const storedSettings = localStorage.getItem(USER_SETTINGS_KEY);
         if (storedSettings) {
-          setSettings(JSON.parse(storedSettings));
+          const parsedSettings = JSON.parse(storedSettings);
+          // Ensure all keys from DEFAULT_SETTINGS are present, even if new ones are added
+          setSettings({ ...DEFAULT_SETTINGS, ...parsedSettings });
         } else {
           // If no settings stored, save the default ones
           localStorage.setItem(USER_SETTINGS_KEY, JSON.stringify(DEFAULT_SETTINGS));
@@ -58,3 +62,4 @@ export function useUserSettings() {
     updateSettings,
   };
 }
+

@@ -11,13 +11,16 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { useUserSettings } from '@/hooks/useUserSettings';
-import { Loader2, Save, SettingsIcon as SettingsPageIcon } from 'lucide-react'; // Renamed to avoid conflict
+import { Loader2, Save, SettingsIcon as SettingsPageIcon, BellRing, Info } from 'lucide-react'; 
 import { Separator } from '@/components/ui/separator';
+import { Switch } from "@/components/ui/switch";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 const settingsSchema = z.object({
   defaultTaskTime: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, {
     message: "Invalid time format. Please use HH:MM (e.g., 09:30 or 17:00).",
   }),
+  // enableEmailAlerts is handled separately, not part of this form schema directly
 });
 
 type SettingsFormValues = z.infer<typeof settingsSchema>;
@@ -37,17 +40,26 @@ export default function SettingsPage() {
   useEffect(() => {
     if (!isLoadingSettings) {
       form.reset({ defaultTaskTime: settings.defaultTaskTime });
+      // No need to reset enableEmailAlerts here, as it's managed directly by the Switch
     }
   }, [settings, isLoadingSettings, form]);
 
-  const onSubmit = (data: SettingsFormValues) => {
+  const onSubmitTaskPreferences = (data: SettingsFormValues) => {
     setIsSaving(true);
     updateSettings({ defaultTaskTime: data.defaultTaskTime });
     toast({
-      title: "Settings Saved",
-      description: "Your preferences have been updated locally in your browser.",
+      title: "Task Preferences Saved",
+      description: "Your task preferences have been updated locally.",
     });
     setIsSaving(false);
+  };
+
+  const handleEmailAlertsToggle = (checked: boolean) => {
+    updateSettings({ enableEmailAlerts: checked });
+    toast({
+      title: "Notification Settings Updated",
+      description: `Email alerts ${checked ? 'enabled' : 'disabled'}. Actual email sending requires backend setup.`,
+    });
   };
 
   if (isLoadingSettings) {
@@ -73,14 +85,13 @@ export default function SettingsPage() {
         </div>
       </div>
       
-
       <Card className="shadow-lg rounded-lg">
         <CardHeader>
           <CardTitle>Task Preferences</CardTitle>
           <CardDescription>Set default values for new tasks. These settings are stored locally in your browser.</CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+          <form onSubmit={form.handleSubmit(onSubmitTaskPreferences)} className="space-y-6">
             <div className="space-y-2">
               <Label htmlFor="defaultTaskTime" className="text-base">Default Task Time</Label>
               <Input
@@ -116,15 +127,40 @@ export default function SettingsPage() {
 
       <Card className="shadow-lg rounded-lg">
         <CardHeader>
-          <CardTitle>Notification Preferences</CardTitle>
-          <CardDescription>(Future Feature)</CardDescription>
+          <CardTitle className="flex items-center">
+            <BellRing className="mr-2 h-5 w-5 text-primary" />
+            Notification Preferences
+          </CardTitle>
+          <CardDescription>Manage how you receive alerts for your tasks.</CardDescription>
         </CardHeader>
-        <CardContent>
-          <p className="text-sm text-muted-foreground">
-            Configuration for task reminders and other notifications will be available here in an upcoming update.
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between space-x-2 p-3 border rounded-lg bg-background/50">
+            <div className="space-y-0.5">
+                <Label htmlFor="emailAlerts" className="text-base font-medium">Enable Email Alerts</Label>
+                <p className="text-xs text-muted-foreground">
+                    Receive email reminders for your tasks.
+                </p>
+            </div>
+            <Switch
+              id="emailAlerts"
+              checked={settings.enableEmailAlerts}
+              onCheckedChange={handleEmailAlertsToggle}
+              disabled={isLoadingSettings}
+              aria-label="Toggle email alerts"
+            />
+          </div>
+          <Alert variant="default" className="border-primary/30">
+            <Info className="h-4 w-4 text-primary" />
+            <AlertTitle className="font-semibold">Backend Implementation Note</AlertTitle>
+            <AlertDescription className="text-xs">
+              Enabling this setting saves your preference. However, the actual sending of emails (1 hour before, on due time) requires further backend development, including moving tasks to a database (like Firestore) and setting up an email service with Cloud Functions. Tasks are currently stored only in your browser.
+            </AlertDescription>
+          </Alert>
+           <p className="text-sm text-muted-foreground pt-2">
+            More notification options (e.g., push notifications) are planned for future updates.
           </p>
         </CardContent>
-         <CardFooter className="text-xs text-muted-foreground">
+         <CardFooter className="text-xs text-muted-foreground pt-4">
             Stay tuned for more customization options!
         </CardFooter>
       </Card>

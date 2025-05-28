@@ -24,12 +24,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { CalendarIcon, PlusCircle, Save } from "lucide-react";
+import { CalendarIcon, PlusCircle, Save, Repeat } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format, parseISO } from "date-fns";
-import type { TaskPriority } from "@/lib/types";
+import type { TaskPriority, Recurrence } from '@/lib/types';
 import { useEffect, useCallback } from "react";
-import { useUserSettings } from '@/hooks/useUserSettings'; // Import useUserSettings
+import { useUserSettings } from '@/hooks/useUserSettings';
 
 const taskFormSchema = z.object({
   title: z.string().min(3, { message: "Title must be at least 3 characters." }).max(100),
@@ -38,13 +38,28 @@ const taskFormSchema = z.object({
   priority: z.enum(['low', 'medium', 'high'] as [TaskPriority, ...TaskPriority[]], {
     required_error: "Priority is required.",
   }),
+  recurrenceType: z.enum(['none', 'daily']).default('none'),
 });
 
 export type TaskFormValues = z.infer<typeof taskFormSchema>;
 
+// Helper to map form values to Task's recurrence structure
+const mapFormValuesToRecurrence = (formValues: TaskFormValues): Recurrence | undefined => {
+  if (formValues.recurrenceType === 'none') {
+    return undefined;
+  }
+  return { type: formValues.recurrenceType };
+};
+
+// Helper to map Task's recurrence structure to form values
+const mapRecurrenceToFormValues = (recurrence?: Recurrence): { recurrenceType: 'none' | 'daily' } => {
+  return { recurrenceType: recurrence?.type || 'none' };
+};
+
+
 interface TaskFormProps {
-  onSubmitSuccess: (data: TaskFormValues) => void;
-  initialData?: Partial<TaskFormValues & { id?: string }>;
+  onSubmitSuccess: (data: TaskFormValues) => void; // Keep this as TaskFormValues, parent will map
+  initialData?: Partial<Omit<TaskFormValues, 'recurrenceType'> & { id?: string; recurrence?: Recurrence }>;
   onCancel?: () => void;
   submitButtonText?: string;
 }
@@ -61,10 +76,10 @@ export function TaskForm({ onSubmitSuccess, initialData, onCancel, submitButtonT
       if (!isNaN(hours) && !isNaN(minutes)) {
         tomorrow.setHours(hours, minutes, 0, 0);
       } else {
-        tomorrow.setHours(9, 0, 0, 0); // Fallback if time parsing fails
+        tomorrow.setHours(9, 0, 0, 0); 
       }
     } else {
-      tomorrow.setHours(9, 0, 0, 0); // Default to 9 AM if no settings or still loading
+      tomorrow.setHours(9, 0, 0, 0); 
     }
     return tomorrow;
   }, [userSettings, isLoadingSettings]);
@@ -76,28 +91,32 @@ export function TaskForm({ onSubmitSuccess, initialData, onCancel, submitButtonT
       description: initialData?.description || "",
       dueDate: initialData?.dueDate ? (typeof initialData.dueDate === 'string' ? parseISO(initialData.dueDate) : initialData.dueDate) : getDefaultDueDate(),
       priority: initialData?.priority || "medium",
+      recurrenceType: initialData?.recurrence?.type || 'none',
     },
   });
-
+  
   useEffect(() => {
-    if (!isLoadingSettings) { // Only reset based on settings once they are loaded
+    if (!isLoadingSettings) {
+      // const defaultRecurrence = mapRecurrenceToFormValues(initialData?.recurrence); // This line seems unused
       if (initialData) {
         form.reset({
           title: initialData.title || "",
           description: initialData.description || "",
           dueDate: initialData.dueDate ? (typeof initialData.dueDate === 'string' ? parseISO(initialData.dueDate) : initialData.dueDate) : getDefaultDueDate(),
           priority: initialData.priority || "medium",
+          recurrenceType: initialData.recurrence?.type || 'none',
         });
       } else {
-        form.reset({ title: "", description: "", dueDate: getDefaultDueDate(), priority: "medium" });
+        form.reset({ title: "", description: "", dueDate: getDefaultDueDate(), priority: "medium", recurrenceType: "none" });
       }
     }
-  }, [initialData, form, getDefaultDueDate, isLoadingSettings]); // Add isLoadingSettings to dependency array
+  }, [initialData, form, getDefaultDueDate, isLoadingSettings]);
+
 
   function processSubmit(data: TaskFormValues) {
-    onSubmitSuccess(data);
-    if (!initialData && !isLoadingSettings) { // Only auto-reset for new task form, once settings are loaded
-      form.reset({ title: "", description: "", dueDate: getDefaultDueDate(), priority: "medium" });
+    onSubmitSuccess(data); // Submit TaskFormValues, mapping happens in parent
+    if (!initialData && !isLoadingSettings) { 
+      form.reset({ title: "", description: "", dueDate: getDefaultDueDate(), priority: "medium", recurrenceType: "none" });
     }
   }
 
@@ -174,7 +193,7 @@ export function TaskForm({ onSubmitSuccess, initialData, onCancel, submitButtonT
                       disabled={(date) => {
                         const yesterday = new Date();
                         yesterday.setDate(yesterday.getDate() -1);
-                        yesterday.setHours(0,0,0,0); // Compare date part only for past check
+                        yesterday.setHours(0,0,0,0); 
                         return initialData ? false : date < yesterday;
                       }}
                       initialFocus
@@ -224,6 +243,30 @@ export function TaskForm({ onSubmitSuccess, initialData, onCancel, submitButtonT
             )}
           />
         </div>
+
+        <FormField
+          control={form.control}
+          name="recurrenceType"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Repeats</FormLabel>
+              <Select onValueChange={field.onChange} defaultValue={field.value} disabled={isLoadingSettings && !initialData}>
+                <FormControl>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Does this task repeat?" />
+                  </SelectTrigger>
+                </FormControl>
+                <SelectContent>
+                  <SelectItem value="none">None</SelectItem>
+                  <SelectItem value="daily">Daily</SelectItem>
+                  {/* Add Weekly, Monthly later */}
+                </SelectContent>
+              </Select>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
         <div className={cn("flex gap-2", onCancel ? "justify-end" : "justify-start")}>
           {onCancel && (
             <Button type="button" variant="outline" onClick={onCancel} disabled={isLoadingSettings && !initialData}>
