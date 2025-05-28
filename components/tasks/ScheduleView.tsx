@@ -1,3 +1,4 @@
+
 "use client";
 
 import type { Task } from '@/lib/types';
@@ -8,11 +9,14 @@ import { PriorityBadge } from './PriorityBadge';
 import { cn } from '@/lib/utils';
 
 interface ScheduleViewProps {
-  tasks: Task[];
+  tasks: Task[]; // These tasks should already be filtered (non-archived)
   title?: string;
 }
 
 export function ScheduleView({ tasks, title = "Next Day's Schedule" }: ScheduleViewProps) {
+  // tasks prop should already be filtered by the parent (e.g., PlannerPage via getTasksForTomorrow)
+  // to exclude archived tasks.
+
   if (!tasks.length) {
     return (
       <Card className="mt-8">
@@ -41,6 +45,9 @@ export function ScheduleView({ tasks, title = "Next Day's Schedule" }: ScheduleV
         <ul className="space-y-3">
           {sortedTasks.map(task => {
             const dueDate = parseISO(task.dueDate);
+            // Double check task is not archived, though it should be pre-filtered
+            if (task.isArchived) return null; 
+            
             return (
               <li key={task.id} className={cn("flex items-start justify-between p-3 rounded-md border", task.isCompleted ? "bg-card/60 opacity-70" : "bg-card/90 hover:bg-card/100")}>
                 <div className="flex items-start gap-3">

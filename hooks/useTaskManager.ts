@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect, useCallback } from 'react';
@@ -14,18 +15,16 @@ export function useTaskManager() {
     try {
       const storedTasks = localStorage.getItem(LOCAL_STORAGE_KEY);
       if (storedTasks) {
-        setTasks(JSON.parse(storedTasks));
+        setTasks(JSON.parse(storedTasks).map((task: Task) => ({ ...task, isArchived: task.isArchived || false })) );
       }
     } catch (error) {
       console.error("Failed to load tasks from localStorage:", error);
-      // Optionally, clear corrupted storage
-      // localStorage.removeItem(LOCAL_STORAGE_KEY);
     }
     setIsLoading(false);
   }, []);
 
   useEffect(() => {
-    if (!isLoading) { // Only save after initial load is complete
+    if (!isLoading) { 
       try {
         localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(tasks));
       } catch (error) {
@@ -34,12 +33,13 @@ export function useTaskManager() {
     }
   }, [tasks, isLoading]);
 
-  const addTask = useCallback((newTaskData: Omit<Task, 'id' | 'isCompleted' | 'createdAt' | 'suggestedTimeline' | 'reasoning'>) => {
+  const addTask = useCallback((newTaskData: Omit<Task, 'id' | 'isCompleted' | 'createdAt' | 'suggestedTimeline' | 'reasoning' | 'estimatedDuration' | 'isArchived'>) => {
     const newTask: Task = {
       ...newTaskData,
       id: crypto.randomUUID(),
       isCompleted: false,
       createdAt: new Date().toISOString(),
+      isArchived: false,
     };
     setTasks(prevTasks => [newTask, ...prevTasks]);
   }, []);
@@ -58,17 +58,21 @@ export function useTaskManager() {
     );
   }, []);
 
-  const deleteTask = useCallback((taskId: string) => {
-    setTasks(prevTasks => prevTasks.filter(task => task.id !== taskId));
+  const archiveTask = useCallback((taskId: string) => {
+    setTasks(prevTasks =>
+      prevTasks.map(task =>
+        task.id === taskId ? { ...task, isArchived: true } : task
+      )
+    );
   }, []);
 
   const getTaskById = useCallback((taskId: string) => {
-    return tasks.find(task => task.id === taskId);
+    return tasks.find(task => task.id === taskId && !task.isArchived);
   }, [tasks]);
 
   const getTasksForDate = useCallback((date: Date) => {
     const targetDateString = date.toISOString().split('T')[0];
-    return tasks.filter(task => task.dueDate.startsWith(targetDateString));
+    return tasks.filter(task => task.dueDate.startsWith(targetDateString) && !task.isArchived);
   }, [tasks]);
   
   const getTasksForTomorrow = useCallback(() => {
@@ -78,20 +82,23 @@ export function useTaskManager() {
   }, [getTasksForDate]);
 
   const getTasksForToday = useCallback(() => {
-    return getTasksForDate(new Date());
-  }, [getTasksForDate]);
+    const today = new Date();
+    return tasks.filter(task => {
+      const taskDate = new Date(task.dueDate).toDateString();
+      return taskDate === today.toDateString() && !task.isArchived;
+    });
+  }, [tasks]);
 
   const fetchAiTimelineSuggestion = useCallback(async (taskId: string) => {
     const task = tasks.find(t => t.id === taskId);
     if (!task) return;
 
-    // Simple user history based on current tasks
-    // For a more sophisticated history, you might analyze completed tasks, average completion times etc.
     let userHistory = "User is planning tasks. ";
-    if (tasks.length > 0) {
-      userHistory += `Current tasks include: ${tasks.slice(0, 3).map(t => `${t.title} (Priority: ${t.priority})`).join(', ')}.`;
+    const activeTasks = tasks.filter(t => !t.isArchived);
+    if (activeTasks.length > 0) {
+      userHistory += `Current active tasks include: ${activeTasks.slice(0, 3).map(t => `${t.title} (Priority: ${t.priority})`).join(', ')}.`;
     } else {
-      userHistory += "No prior task data available for this session.";
+      userHistory += "No prior active task data available for this session.";
     }
     
     const input: SuggestTimelineInput = {
@@ -101,21 +108,27 @@ export function useTaskManager() {
 
     try {
       const result = await suggestTimeline(input);
-      updateTask({ ...task, suggestedTimeline: result.suggestedTimeline, reasoning: result.reasoning });
+      updateTask({ 
+        ...task, 
+        suggestedTimeline: result.suggestedTimeline, 
+        estimatedDuration: result.estimatedDuration,
+        reasoning: result.reasoning 
+      });
     } catch (error) {
       console.error("Error fetching AI timeline suggestion:", error);
-      updateTask({ ...task, suggestedTimeline: "Error fetching suggestion.", reasoning: "Could not connect to AI service." });
+      updateTask({ ...task, suggestedTimeline: "Error fetching suggestion.", reasoning: "Could not connect to AI service.", estimatedDuration: undefined });
     }
   }, [tasks, updateTask]);
 
 
   return {
-    tasks,
+    tasks: tasks.filter(task => !task.isArchived), // Return only non-archived tasks for general consumption
+    allTasks: tasks, // For archive page or internal use
     isLoading,
     addTask,
     updateTask,
     toggleTaskCompletion,
-    deleteTask,
+    archiveTask,
     getTaskById,
     getTasksForTomorrow,
     getTasksForToday,

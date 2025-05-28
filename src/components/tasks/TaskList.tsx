@@ -1,3 +1,4 @@
+
 "use client";
 
 import type { Task } from '@/lib/types';
@@ -7,14 +8,17 @@ import { AnimatePresence, motion } from 'framer-motion'; // For animations
 interface TaskListProps {
   tasks: Task[];
   onToggleComplete: (taskId: string) => void;
-  onDelete: (taskId: string) => void;
+  onArchive: (taskId: string) => void; // Changed onDelete to onArchive
   onGetAiSuggestion: (taskId: string) => Promise<void>;
+  onEditTask?: (task: Task) => void; 
   title?: string;
   emptyStateMessage?: string;
 }
 
-export function TaskList({ tasks, onToggleComplete, onDelete, onGetAiSuggestion, title, emptyStateMessage = "No tasks here yet. Time to plan!" }: TaskListProps) {
-  if (!tasks.length) {
+export function TaskList({ tasks, onToggleComplete, onArchive, onGetAiSuggestion, onEditTask, title, emptyStateMessage = "No tasks here yet. Time to plan!" }: TaskListProps) {
+  const activeTasks = tasks.filter(task => !task.isArchived);
+
+  if (!activeTasks.length) {
     return (
       <div className="text-center py-10">
         {title && <h3 className="text-xl font-semibold mb-4 text-foreground/80">{title}</h3>}
@@ -27,10 +31,10 @@ export function TaskList({ tasks, onToggleComplete, onDelete, onGetAiSuggestion,
     <div className="space-y-4">
       {title && <h3 className="text-xl font-semibold mb-4 text-foreground/80">{title}</h3>}
       <AnimatePresence>
-        {tasks.map((task) => (
+        {activeTasks.map((task) => (
           <motion.div
             key={task.id}
-            layout // Animates layout changes (e.g., when items are added/removed)
+            layout 
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -20, transition: { duration: 0.2 } }}
@@ -39,8 +43,9 @@ export function TaskList({ tasks, onToggleComplete, onDelete, onGetAiSuggestion,
             <TaskCard
               task={task}
               onToggleComplete={onToggleComplete}
-              onDelete={onDelete}
+              onArchive={onArchive} // Pass onArchive
               onGetAiSuggestion={onGetAiSuggestion}
+              onEdit={onEditTask ? () => onEditTask(task) : () => console.warn("onEditTask not provided")}
             />
           </motion.div>
         ))}

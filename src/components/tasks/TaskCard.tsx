@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState } from 'react';
@@ -6,7 +7,7 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter }
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { PriorityBadge } from './PriorityBadge';
-import { Edit3, Trash2, Zap, ChevronDown, ChevronUp, Clock } from 'lucide-react';
+import { Edit3, Zap, ChevronDown, ChevronUp, Clock, ArchiveIcon } from 'lucide-react'; // Changed Trash2 to ArchiveIcon
 import { format, parseISO, isToday, isTomorrow, formatDistanceToNow } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -17,12 +18,12 @@ import { Skeleton } from '@/components/ui/skeleton';
 interface TaskCardProps {
   task: Task;
   onToggleComplete: (taskId: string) => void;
-  onDelete: (taskId: string) => void;
+  onArchive: (taskId: string) => void; // Changed onDelete to onArchive
   onGetAiSuggestion: (taskId: string) => Promise<void>;
-  // onEdit: (task: Task) => void; // Future: for editing tasks
+  onEdit: (task: Task) => void;
 }
 
-export function TaskCard({ task, onToggleComplete, onDelete, onGetAiSuggestion }: TaskCardProps) {
+export function TaskCard({ task, onToggleComplete, onArchive, onGetAiSuggestion, onEdit }: TaskCardProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [isAiLoading, setIsAiLoading] = useState(false);
 
@@ -47,7 +48,7 @@ export function TaskCard({ task, onToggleComplete, onDelete, onGetAiSuggestion }
   const isDueSoon = isToday(dueDate) && dueDate.getTime() > new Date().getTime() && (dueDate.getTime() - new Date().getTime()) < (4 * 60 * 60 * 1000); // Within next 4 hours
 
   return (
-    <Card className={cn("w-full shadow-lg hover:shadow-xl transition-shadow duration-300", task.isCompleted ? 'opacity-60 bg-card/80' : 'bg-card', isDueSoon ? 'border-accent ring-2 ring-accent/50' : '')}>
+    <Card className={cn("w-full shadow-lg hover:shadow-xl transition-shadow duration-300", task.isCompleted ? 'opacity-60 bg-card/80' : 'bg-card', isDueSoon ? 'border-accent ring-2 ring-accent/50' : '', task.isArchived ? 'hidden' : '')}>
       <CardHeader className="flex flex-row items-start justify-between gap-4">
         <div className="flex items-center space-x-3">
           <Checkbox
@@ -75,7 +76,7 @@ export function TaskCard({ task, onToggleComplete, onDelete, onGetAiSuggestion }
           <Separator className="my-3" />
           {task.description && (
             <p className="text-sm text-muted-foreground mb-3 break-words">
-              {isExpanded || !task.suggestedTimeline ? task.description : `${task.description.substring(0,100)}${task.description.length > 100 ? '...' : ''}`}
+              {isExpanded || (!task.description || task.description.length <= 100) || !task.suggestedTimeline ? task.description : `${task.description.substring(0,100)}${task.description.length > 100 ? '...' : ''}`}
             </p>
           )}
 
@@ -83,6 +84,7 @@ export function TaskCard({ task, onToggleComplete, onDelete, onGetAiSuggestion }
             <div className="space-y-2 mt-2">
               <Skeleton className="h-4 w-3/4" />
               <Skeleton className="h-4 w-1/2" />
+              <Skeleton className="h-4 w-2/3" />
             </div>
           )}
 
@@ -92,15 +94,16 @@ export function TaskCard({ task, onToggleComplete, onDelete, onGetAiSuggestion }
               <AlertTitle className="text-primary/90">AI Suggestion</AlertTitle>
               <AlertDescription className="text-sm">
                 <strong>Timeline:</strong> {task.suggestedTimeline}
+                {task.estimatedDuration && <><br/><strong>Est. Duration:</strong> {task.estimatedDuration}</>}
                 {task.reasoning && isExpanded && <><br/><strong>Reasoning:</strong> {task.reasoning}</>}
               </AlertDescription>
             </Alert>
           )}
           
-          {(task.description || task.suggestedTimeline) && (
+          {( (task.description && task.description.length > 100) || task.suggestedTimeline || (task.reasoning && !isExpanded) ) && (
             <Button variant="link" size="sm" onClick={() => setIsExpanded(!isExpanded)} className="p-0 h-auto text-accent">
               {isExpanded ? <ChevronUp className="mr-1 h-4 w-4" /> : <ChevronDown className="mr-1 h-4 w-4" />}
-              {isExpanded ? 'Show Less' : 'Show More'}
+              {isExpanded ? 'Show Less' : 'Show Details'}
             </Button>
           )}
         </CardContent>
@@ -114,11 +117,11 @@ export function TaskCard({ task, onToggleComplete, onDelete, onGetAiSuggestion }
           <Button variant="outline" size="sm" onClick={handleAiSuggest} disabled={isAiLoading} className="hover:border-accent hover:text-accent">
             <Zap className="mr-1 h-4 w-4" /> AI Plan
           </Button>
-          {/* <Button variant="outline" size="icon" className="hover:border-blue-500 hover:text-blue-400" onClick={() => onEdit(task)} aria-label="Edit task">
+          <Button variant="outline" size="icon" className="hover:border-primary hover:text-primary" onClick={() => onEdit(task)} aria-label="Edit task">
             <Edit3 className="h-4 w-4" />
-          </Button> */}
-          <Button variant="outline" size="icon" className="hover:border-destructive hover:text-destructive" onClick={() => onDelete(task.id)} aria-label="Delete task">
-            <Trash2 className="h-4 w-4" />
+          </Button>
+          <Button variant="outline" size="icon" className="hover:border-destructive hover:text-destructive" onClick={() => onArchive(task.id)} aria-label="Archive task">
+            <ArchiveIcon className="h-4 w-4" />
           </Button>
         </div>
       </CardFooter>

@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useMemo, useEffect } from 'react';
@@ -8,23 +9,35 @@ import { CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 
 export default function SummaryPage() {
-  const { tasks, isLoading, toggleTaskCompletion, deleteTask, fetchAiTimelineSuggestion, getTasksForToday } = useTaskManager();
+  const { 
+    tasks: allNonArchivedTasks, // Renamed to reflect it's already filtered from the hook
+    isLoading, 
+    toggleTaskCompletion, 
+    archiveTask, // Changed from deleteTask
+    fetchAiTimelineSuggestion, 
+    getTasksForToday 
+  } = useTaskManager();
   const { toast } = useToast();
 
+  // getTasksForToday already filters for non-archived tasks
+  const todayTasks = useMemo(() => getTasksForToday(), [getTasksForToday]);
+
   useEffect(() => {
-    if (!isLoading && tasks.length > 0) {
-      const todayTasks = getTasksForToday();
-      if (todayTasks.length > 0) {
+    if (!isLoading && todayTasks.length > 0) { // Check todayTasks directly
         toast({
           title: "Today's Summary",
           description: `You have ${todayTasks.length} task${todayTasks.length === 1 ? '' : 's'} planned for today.`,
           variant: "default",
         });
-      }
+    } else if (!isLoading && todayTasks.length === 0) {
+        toast({
+            title: "Today's Summary",
+            description: "No tasks planned for today.",
+            variant: "default",
+        });
     }
-  }, [isLoading, tasks, getTasksForToday, toast]);
+  }, [isLoading, todayTasks, toast]); // Depend on todayTasks
 
-  const todayTasks = useMemo(() => getTasksForToday(), [getTasksForToday]);
   
   const completedTasks = useMemo(() => todayTasks.filter(task => task.isCompleted), [todayTasks]);
   const pendingTasks = useMemo(() => todayTasks.filter(task => !task.isCompleted), [todayTasks]);
@@ -68,7 +81,7 @@ export default function SummaryPage() {
             <TaskList
               tasks={pendingTasks}
               onToggleComplete={toggleTaskCompletion}
-              onDelete={deleteTask}
+              onArchive={archiveTask} // Changed from onDelete
               onGetAiSuggestion={fetchAiTimelineSuggestion}
               emptyStateMessage="All tasks for today are completed! 🎉"
             />
@@ -87,7 +100,7 @@ export default function SummaryPage() {
             <TaskList
               tasks={completedTasks}
               onToggleComplete={toggleTaskCompletion}
-              onDelete={deleteTask}
+              onArchive={archiveTask} // Changed from onDelete
               onGetAiSuggestion={fetchAiTimelineSuggestion}
               emptyStateMessage="No tasks completed today yet."
             />

@@ -1,3 +1,4 @@
+
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -23,10 +24,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { CalendarIcon, PlusCircle } from "lucide-react";
+import { CalendarIcon, PlusCircle, Save } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { format } from "date-fns";
-import type { Task, TaskPriority } from "@/lib/types";
+import { format, parseISO } from "date-fns";
+import type { TaskPriority } from "@/lib/types";
+import { useEffect, useCallback } from "react";
+import { useUserSettings } from '@/hooks/useUserSettings'; // Import useUserSettings
 
 const taskFormSchema = z.object({
   title: z.string().min(3, { message: "Title must be at least 3 characters." }).max(100),
@@ -37,42 +40,72 @@ const taskFormSchema = z.object({
   }),
 });
 
-type TaskFormValues = z.infer<typeof taskFormSchema>;
+export type TaskFormValues = z.infer<typeof taskFormSchema>;
 
 interface TaskFormProps {
-  onSubmit: (data: Omit<Task, 'id' | 'isCompleted' | 'createdAt' | 'suggestedTimeline' | 'reasoning'>) => void;
-  initialData?: Partial<TaskFormValues>; // For editing, not used in this iteration
+  onSubmitSuccess: (data: TaskFormValues) => void;
+  initialData?: Partial<TaskFormValues & { id?: string }>;
+  onCancel?: () => void;
+  submitButtonText?: string;
 }
 
-export function TaskForm({ onSubmit }: TaskFormProps) {
-  const tomorrow = new Date();
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  tomorrow.setHours(9, 0, 0, 0); // Default to 9 AM tomorrow
+export function TaskForm({ onSubmitSuccess, initialData, onCancel, submitButtonText }: TaskFormProps) {
+  const { settings: userSettings, isLoadingSettings } = useUserSettings();
+
+  const getDefaultDueDate = useCallback(() => {
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    if (!isLoadingSettings && userSettings.defaultTaskTime) {
+      const [hours, minutes] = userSettings.defaultTaskTime.split(':').map(Number);
+      if (!isNaN(hours) && !isNaN(minutes)) {
+        tomorrow.setHours(hours, minutes, 0, 0);
+      } else {
+        tomorrow.setHours(9, 0, 0, 0); // Fallback if time parsing fails
+      }
+    } else {
+      tomorrow.setHours(9, 0, 0, 0); // Default to 9 AM if no settings or still loading
+    }
+    return tomorrow;
+  }, [userSettings, isLoadingSettings]);
 
   const form = useForm<TaskFormValues>({
     resolver: zodResolver(taskFormSchema),
     defaultValues: {
-      title: "",
-      description: "",
-      dueDate: tomorrow,
-      priority: "medium",
+      title: initialData?.title || "",
+      description: initialData?.description || "",
+      dueDate: initialData?.dueDate ? (typeof initialData.dueDate === 'string' ? parseISO(initialData.dueDate) : initialData.dueDate) : getDefaultDueDate(),
+      priority: initialData?.priority || "medium",
     },
   });
 
-  function handleSubmit(data: TaskFormValues) {
-    onSubmit({
-      title: data.title,
-      description: data.description || "",
-      // Ensure dueDate is stored as ISO string. Time from date picker is preserved.
-      dueDate: data.dueDate.toISOString(), 
-      priority: data.priority,
-    });
-    form.reset({ title: "", description: "", dueDate: tomorrow, priority: "medium" });
+  useEffect(() => {
+    if (!isLoadingSettings) { // Only reset based on settings once they are loaded
+      if (initialData) {
+        form.reset({
+          title: initialData.title || "",
+          description: initialData.description || "",
+          dueDate: initialData.dueDate ? (typeof initialData.dueDate === 'string' ? parseISO(initialData.dueDate) : initialData.dueDate) : getDefaultDueDate(),
+          priority: initialData.priority || "medium",
+        });
+      } else {
+        form.reset({ title: "", description: "", dueDate: getDefaultDueDate(), priority: "medium" });
+      }
+    }
+  }, [initialData, form, getDefaultDueDate, isLoadingSettings]); // Add isLoadingSettings to dependency array
+
+  function processSubmit(data: TaskFormValues) {
+    onSubmitSuccess(data);
+    if (!initialData && !isLoadingSettings) { // Only auto-reset for new task form, once settings are loaded
+      form.reset({ title: "", description: "", dueDate: getDefaultDueDate(), priority: "medium" });
+    }
   }
+
+  const effectiveSubmitButtonText = submitButtonText || (initialData ? 'Update Task' : 'Add Task');
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-6 p-1">
+      <form onSubmit={form.handleSubmit(processSubmit)} className="space-y-6 p-1">
         <FormField
           control={form.control}
           name="title"
@@ -80,7 +113,7 @@ export function TaskForm({ onSubmit }: TaskFormProps) {
             <FormItem>
               <FormLabel>Task Title</FormLabel>
               <FormControl>
-                <Input placeholder="E.g., Prepare presentation" {...field} />
+                <Input placeholder="E.g., Prepare presentation" {...field} disabled={isLoadingSettings && !initialData} />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -93,7 +126,7 @@ export function TaskForm({ onSubmit }: TaskFormProps) {
             <FormItem>
               <FormLabel>Description (Optional)</FormLabel>
               <FormControl>
-                <Textarea placeholder="Add more details about the task..." className="resize-none" {...field} />
+                <Textarea placeholder="Add more details about the task..." className="resize-none" {...field} disabled={isLoadingSettings && !initialData} />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -105,7 +138,7 @@ export function TaskForm({ onSubmit }: TaskFormProps) {
             name="dueDate"
             render={({ field }) => (
               <FormItem className="flex flex-col">
-                <FormLabel>Due Date for Next Day</FormLabel>
+                <FormLabel>Due Date {initialData ? '' : 'for Next Day'}</FormLabel>
                 <Popover>
                   <PopoverTrigger asChild>
                     <FormControl>
@@ -115,9 +148,10 @@ export function TaskForm({ onSubmit }: TaskFormProps) {
                           "w-full pl-3 text-left font-normal",
                           !field.value && "text-muted-foreground"
                         )}
+                        disabled={isLoadingSettings && !initialData}
                       >
                         {field.value ? (
-                          format(field.value, "PPP HH:mm") // Show date and time
+                          format(field.value, "PPP HH:mm")
                         ) : (
                           <span>Pick a date and time</span>
                         )}
@@ -131,35 +165,34 @@ export function TaskForm({ onSubmit }: TaskFormProps) {
                       selected={field.value}
                       onSelect={(date) => {
                         if (date) {
-                           // Preserve existing time if only date part changes, or set default time for new date
                            const newDate = new Date(date);
-                           if (field.value) {
-                             newDate.setHours(field.value.getHours(), field.value.getMinutes(), field.value.getSeconds());
-                           } else {
-                             newDate.setHours(tomorrow.getHours(), tomorrow.getMinutes(), 0); // Default time
-                           }
+                           const referenceTimeSource = field.value || getDefaultDueDate();
+                           newDate.setHours(referenceTimeSource.getHours(), referenceTimeSource.getMinutes(), 0, 0);
                            field.onChange(newDate);
                         }
                       }}
                       disabled={(date) => {
                         const yesterday = new Date();
                         yesterday.setDate(yesterday.getDate() -1);
-                        return date < yesterday;
+                        yesterday.setHours(0,0,0,0); // Compare date part only for past check
+                        return initialData ? false : date < yesterday;
                       }}
                       initialFocus
                     />
-                    {/* Simple Time Picker - could be replaced with a more robust one */}
                     <div className="p-2 border-t border-border">
                       <Input
                         type="time"
-                        defaultValue={field.value ? format(field.value, "HH:mm") : format(tomorrow, "HH:mm")}
+                        defaultValue={field.value ? format(field.value, "HH:mm") : format(getDefaultDueDate(), "HH:mm")}
                         onChange={(e) => {
                           const [hours, minutes] = e.target.value.split(':').map(Number);
-                          const newDate = field.value ? new Date(field.value) : new Date(tomorrow);
-                          newDate.setHours(hours, minutes);
-                          field.onChange(newDate);
+                          const newDate = field.value ? new Date(field.value) : new Date(getDefaultDueDate());
+                          if (!isNaN(hours) && !isNaN(minutes)) {
+                            newDate.setHours(hours, minutes);
+                            field.onChange(newDate);
+                          }
                         }}
                         className="w-full"
+                        disabled={isLoadingSettings && !initialData}
                       />
                     </div>
                   </PopoverContent>
@@ -174,7 +207,7 @@ export function TaskForm({ onSubmit }: TaskFormProps) {
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Priority</FormLabel>
-                <Select onValueChange={field.onChange} defaultValue={field.value}>
+                <Select onValueChange={field.onChange} defaultValue={field.value} disabled={isLoadingSettings && !initialData}>
                   <FormControl>
                     <SelectTrigger>
                       <SelectValue placeholder="Select priority" />
@@ -191,9 +224,17 @@ export function TaskForm({ onSubmit }: TaskFormProps) {
             )}
           />
         </div>
-        <Button type="submit" className="w-full md:w-auto bg-accent text-accent-foreground hover:bg-accent/90">
-          <PlusCircle className="mr-2 h-5 w-5" /> Add Task
-        </Button>
+        <div className={cn("flex gap-2", onCancel ? "justify-end" : "justify-start")}>
+          {onCancel && (
+            <Button type="button" variant="outline" onClick={onCancel} disabled={isLoadingSettings && !initialData}>
+              Cancel
+            </Button>
+          )}
+          <Button type="submit" className={cn(onCancel ? "" : "w-full md:w-auto", "bg-accent text-accent-foreground hover:bg-accent/90")} disabled={isLoadingSettings && !initialData}>
+            {initialData ? <Save className="mr-2 h-5 w-5" /> : <PlusCircle className="mr-2 h-5 w-5" />}
+            {effectiveSubmitButtonText}
+          </Button>
+        </div>
       </form>
     </Form>
   );

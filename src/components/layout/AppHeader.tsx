@@ -4,7 +4,7 @@
 import Link from 'next/link';
 import { Logo } from '@/components/icons/Logo';
 import { Button } from '@/components/ui/button';
-import { Moon, ListChecks, LogIn, LogOut, UserPlus, MailWarning } from 'lucide-react';
+import { Moon, ListChecks, LogIn, LogOut, UserPlus, MailWarning, Settings } from 'lucide-react'; // Added Settings
 import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
@@ -28,7 +28,7 @@ export function AppHeader() {
     try {
       await signOutUser();
       toast({ title: "Logged Out", description: "You have been successfully logged out." });
-      router.push('/login'); // Redirect to login page after logout
+      router.push('/login'); 
     } catch (error) {
       console.error("Logout failed:", error);
       toast({ title: "Logout Failed", description: "Could not log you out. Please try again.", variant: "destructive" });
@@ -36,7 +36,11 @@ export function AppHeader() {
   };
   
   const handleSendVerification = async () => {
-    await sendUserEmailVerification();
+    if (currentUser && !currentUser.emailVerified) {
+      await sendUserEmailVerification();
+    } else if (currentUser && currentUser.emailVerified) {
+      toast({ title: "Email Already Verified", description: "Your email address has already been verified.", variant: "default" });
+    }
   };
 
   return (
@@ -52,13 +56,13 @@ export function AppHeader() {
               <Button variant="ghost" asChild className="hidden sm:flex">
                 <Link href="/">
                   <Moon className="mr-2 h-5 w-5" />
-                  <span>Plan Next Day</span>
+                  <span className="hidden md:inline">Plan Next Day</span>
                 </Link>
               </Button>
               <Button variant="ghost" asChild className="hidden sm:flex">
                 <Link href="/summary">
                   <ListChecks className="mr-2 h-5 w-5" />
-                  <span>Daily Summary</span>
+                  <span className="hidden md:inline">Daily Summary</span>
                 </Link>
               </Button>
 
@@ -79,20 +83,43 @@ export function AppHeader() {
                       </p>
                       <p className="text-xs leading-none text-muted-foreground">
                         {currentUser.email}
+                         {currentUser.emailVerified ? 
+                           <span className="text-green-400 ml-1">(Verified)</span> : 
+                           <span className="text-yellow-400 ml-1">(Not Verified)</span>
+                         }
                       </p>
                     </div>
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
+                   <DropdownMenuItem asChild className="sm:hidden cursor-pointer">
+                    <Link href="/">
+                      <Moon className="mr-2 h-4 w-4" />
+                      Plan Next Day
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild className="sm:hidden cursor-pointer">
+                    <Link href="/summary">
+                      <ListChecks className="mr-2 h-4 w-4" />
+                      Daily Summary
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild className="cursor-pointer">
+                    <Link href="/settings">
+                      <Settings className="mr-2 h-4 w-4" />
+                      Settings
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
                   {!currentUser.emailVerified && (
                     <>
-                     <DropdownMenuItem onClick={handleSendVerification} className="text-yellow-500 hover:!text-yellow-400 cursor-pointer">
+                     <DropdownMenuItem onClick={handleSendVerification} className="text-yellow-500 hover:!text-yellow-400 focus:!text-yellow-400 focus:!bg-yellow-500/10 cursor-pointer">
                         <MailWarning className="mr-2 h-4 w-4" />
                         Verify Email
                       </DropdownMenuItem>
                       <DropdownMenuSeparator />
                     </>
                   )}
-                  <DropdownMenuItem onClick={handleLogout} className="cursor-pointer">
+                  <DropdownMenuItem onClick={handleLogout} className="cursor-pointer text-red-400 hover:!text-red-300 focus:!text-red-300 focus:!bg-red-500/10">
                     <LogOut className="mr-2 h-4 w-4" />
                     Log out
                   </DropdownMenuItem>

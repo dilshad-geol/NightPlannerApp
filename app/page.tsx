@@ -1,13 +1,21 @@
+
 "use client";
 
 import { useState, useMemo, useEffect } from 'react';
-import { TaskForm } from '@/components/tasks/TaskForm';
+import { TaskForm, type TaskFormValues } from '@/components/tasks/TaskForm';
 import { TaskList } from '@/components/tasks/TaskList';
 import { ScheduleView } from '@/components/tasks/ScheduleView';
 import { useTaskManager } from '@/hooks/useTaskManager';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Filter, ListTodo, CalendarDays, Loader2 } from 'lucide-react';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -16,30 +24,35 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import type { TaskPriority } from '@/lib/types';
+import type { Task, TaskPriority } from '@/lib/types';
+import { useToast } from "@/hooks/use-toast";
+import { parseISO } from 'date-fns';
+
 
 export default function PlannerPage() {
   const { 
-    tasks, 
+    tasks: allNonArchivedTasks, // Renamed to reflect it's already filtered
     isLoading,
     addTask, 
+    updateTask,
     toggleTaskCompletion, 
-    deleteTask, 
+    archiveTask, // Changed from deleteTask
     fetchAiTimelineSuggestion,
     getTasksForTomorrow 
   } = useTaskManager();
+  const { toast } = useToast();
   
   const [priorityFilter, setPriorityFilter] = useState<TaskPriority | 'all'>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | 'completed' | 'pending'>('all');
 
+  const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+
+  // getTasksForTomorrow already filters for non-archived tasks
   const tasksForTomorrow = useMemo(() => getTasksForTomorrow(), [getTasksForTomorrow]);
 
-  const filteredTasks = useMemo(() => {
-    return tasks
-      .filter(task => {
-        const isTomorrow = new Date(task.dueDate).toDateString() === new Date(new Date().setDate(new Date().getDate() + 1)).toDateString();
-        return isTomorrow; // Only show tasks planned for tomorrow
-      })
+  const filteredTasksForTomorrow = useMemo(() => {
+    return tasksForTomorrow // Start with already filtered (for tomorrow and non-archived) tasks
       .filter(task => priorityFilter === 'all' || task.priority === priorityFilter)
       .filter(task => {
         if (statusFilter === 'all') return true;
@@ -47,8 +60,43 @@ export default function PlannerPage() {
         if (statusFilter === 'pending') return !task.isCompleted;
         return true;
       })
-      .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()); // Sort by creation time
-  }, [tasks, priorityFilter, statusFilter]);
+      .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+  }, [tasksForTomorrow, priorityFilter, statusFilter]);
+
+  const handleOpenEditModal = (task: Task) => {
+    setEditingTask(task);
+    setIsEditModalOpen(true);
+  };
+
+  const handleCloseEditModal = () => {
+    setIsEditModalOpen(false);
+    setEditingTask(null); 
+  };
+
+  const handleEditTaskFormSubmit = (data: TaskFormValues) => {
+    if (editingTask) {
+      updateTask({
+        ...editingTask,
+        title: data.title,
+        description: data.description || "",
+        dueDate: data.dueDate.toISOString(),
+        priority: data.priority,
+      });
+      toast({ title: "Task Updated", description: `"${data.title}" has been updated.` });
+    }
+    handleCloseEditModal();
+  };
+
+  const handleAddTaskFormSubmit = (data: TaskFormValues) => {
+     addTask({
+       title: data.title,
+       description: data.description || "",
+       dueDate: data.dueDate.toISOString(),
+       priority: data.priority,
+     });
+     toast({ title: "Task Added", description: `"${data.title}" has been added for tomorrow.`});
+  };
+
 
   if (isLoading) {
     return (
@@ -70,7 +118,16 @@ export default function PlannerPage() {
         </p>
       </div>
 
-      <TaskForm onSubmit={addTask} />
+      <div className="rounded-lg border bg-card text-card-foreground shadow-sm p-6">
+        <h2 className="text-2xl font-semibold tracking-tight text-foreground mb-4">
+          Create a New Task for Tomorrow
+        </h2>
+        <TaskForm
+          onSubmitSuccess={handleAddTaskFormSubmit}
+          submitButtonText="Add Task to Plan"
+        />
+      </div>
+      
 
       <Tabs defaultValue="tasks" className="w-full">
         <div className="flex flex-col sm:flex-row justify-between items-center mb-4 gap-4">
@@ -103,17 +160,44 @@ export default function PlannerPage() {
 
         <TabsContent value="tasks">
           <TaskList
-            tasks={filteredTasks}
+            tasks={filteredTasksForTomorrow} // Use the fully filtered list for tomorrow
             onToggleComplete={toggleTaskCompletion}
-            onDelete={deleteTask}
+            onArchive={archiveTask} // Changed from onDelete
             onGetAiSuggestion={fetchAiTimelineSuggestion}
-            emptyStateMessage={tasks.length > 0 ? "No tasks match your current filters for tomorrow." : "No tasks planned for tomorrow yet. Add your first task!"}
+            onEditTask={handleOpenEditModal}
+            emptyStateMessage={tasksForTomorrow.length > 0 ? "No tasks match your current filters for tomorrow." : "No tasks planned for tomorrow yet. Add your first task!"}
           />
         </TabsContent>
         <TabsContent value="schedule">
-          <ScheduleView tasks={tasksForTomorrow} />
+          {/* ScheduleView should use tasksForTomorrow which is already filtered for non-archived */}
+          <ScheduleView tasks={tasksForTomorrow} /> 
         </TabsContent>
       </Tabs>
+
+      {editingTask && (
+        <Dialog open={isEditModalOpen} onOpenChange={(isOpen) => { if (!isOpen) handleCloseEditModal(); else setIsEditModalOpen(true); }}>
+          <DialogContent className="sm:max-w-[480px]">
+            <DialogHeader>
+              <DialogTitle>Edit Task</DialogTitle>
+              <DialogDescription>
+                Make changes to your task details below.
+              </DialogDescription>
+            </DialogHeader>
+            <TaskForm
+              onSubmitSuccess={handleEditTaskFormSubmit}
+              initialData={{
+                id: editingTask.id,
+                title: editingTask.title,
+                description: editingTask.description,
+                dueDate: parseISO(editingTask.dueDate), 
+                priority: editingTask.priority,
+              }}
+              onCancel={handleCloseEditModal}
+              submitButtonText="Update Task"
+            />
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
 }
