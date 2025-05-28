@@ -8,7 +8,8 @@ import { ScheduleView } from '@/components/tasks/ScheduleView';
 import { useTaskManager } from '@/hooks/useTaskManager';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Filter, ListTodo, CalendarDays, Loader2 } from 'lucide-react';
+import { Filter, ListTodo, CalendarDays, Loader2, Calendar as CalendarIcon } from 'lucide-react'; // Added CalendarIcon
+import { Calendar } from "@/components/ui/calendar"; // Added Calendar component
 import {
   Dialog,
   DialogContent,
@@ -26,33 +27,35 @@ import {
 } from "@/components/ui/dropdown-menu";
 import type { Task, TaskPriority } from '@/lib/types';
 import { useToast } from "@/hooks/use-toast";
-import { parseISO } from 'date-fns';
+import { parseISO, format } from 'date-fns';
 
 
 export default function PlannerPage() {
   const { 
-    tasks: allNonArchivedTasks, // Renamed to reflect it's already filtered
     isLoading,
     addTask, 
     updateTask,
     toggleTaskCompletion, 
-    archiveTask, // Changed from deleteTask
+    archiveTask,
     fetchAiTimelineSuggestion,
-    getTasksForTomorrow 
+    getTasksForTomorrow,
+    getTasksForDate // Added getTasksForDate
   } = useTaskManager();
   const { toast } = useToast();
   
   const [priorityFilter, setPriorityFilter] = useState<TaskPriority | 'all'>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | 'completed' | 'pending'>('all');
+  const [activeTab, setActiveTab] = useState<string>("tasks"); // For controlling filter visibility
 
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
 
-  // getTasksForTomorrow already filters for non-archived tasks
+  const [calendarSelectedDate, setCalendarSelectedDate] = useState<Date>(new Date()); // For Day Schedule tab
+
   const tasksForTomorrow = useMemo(() => getTasksForTomorrow(), [getTasksForTomorrow]);
 
   const filteredTasksForTomorrow = useMemo(() => {
-    return tasksForTomorrow // Start with already filtered (for tomorrow and non-archived) tasks
+    return tasksForTomorrow
       .filter(task => priorityFilter === 'all' || task.priority === priorityFilter)
       .filter(task => {
         if (statusFilter === 'all') return true;
@@ -62,6 +65,11 @@ export default function PlannerPage() {
       })
       .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
   }, [tasksForTomorrow, priorityFilter, statusFilter]);
+
+  const tasksForCalendarDate = useMemo(() => {
+    return getTasksForDate(calendarSelectedDate);
+  }, [getTasksForDate, calendarSelectedDate]);
+
 
   const handleOpenEditModal = (task: Task) => {
     setEditingTask(task);
@@ -129,48 +137,65 @@ export default function PlannerPage() {
       </div>
       
 
-      <Tabs defaultValue="tasks" className="w-full">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <div className="flex flex-col sm:flex-row justify-between items-center mb-4 gap-4">
           <TabsList>
             <TabsTrigger value="tasks"><ListTodo className="mr-2 h-4 w-4" />Tasks for Tomorrow</TabsTrigger>
-            <TabsTrigger value="schedule"><CalendarDays className="mr-2 h-4 w-4" />Schedule View</TabsTrigger>
+            <TabsTrigger value="day-schedule"><CalendarDays className="mr-2 h-4 w-4" />Day Schedule</TabsTrigger>
           </TabsList>
           
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline">
-                <Filter className="mr-2 h-4 w-4" /> Filter Tasks
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56">
-              <DropdownMenuLabel>Priority</DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <DropdownMenuCheckboxItem checked={priorityFilter === 'all'} onCheckedChange={() => setPriorityFilter('all')}>All</DropdownMenuCheckboxItem>
-              <DropdownMenuCheckboxItem checked={priorityFilter === 'high'} onCheckedChange={() => setPriorityFilter('high')}>High</DropdownMenuCheckboxItem>
-              <DropdownMenuCheckboxItem checked={priorityFilter === 'medium'} onCheckedChange={() => setPriorityFilter('medium')}>Medium</DropdownMenuCheckboxItem>
-              <DropdownMenuCheckboxItem checked={priorityFilter === 'low'} onCheckedChange={() => setPriorityFilter('low')}>Low</DropdownMenuCheckboxItem>
-              <DropdownMenuLabel>Status</DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <DropdownMenuCheckboxItem checked={statusFilter === 'all'} onCheckedChange={() => setStatusFilter('all')}>All</DropdownMenuCheckboxItem>
-              <DropdownMenuCheckboxItem checked={statusFilter === 'pending'} onCheckedChange={() => setStatusFilter('pending')}>Pending</DropdownMenuCheckboxItem>
-              <DropdownMenuCheckboxItem checked={statusFilter === 'completed'} onCheckedChange={() => setStatusFilter('completed')}>Completed</DropdownMenuCheckboxItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          {activeTab === 'tasks' && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline">
+                  <Filter className="mr-2 h-4 w-4" /> Filter Tasks
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuLabel>Priority</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuCheckboxItem checked={priorityFilter === 'all'} onCheckedChange={() => setPriorityFilter('all')}>All</DropdownMenuCheckboxItem>
+                <DropdownMenuCheckboxItem checked={priorityFilter === 'high'} onCheckedChange={() => setPriorityFilter('high')}>High</DropdownMenuCheckboxItem>
+                <DropdownMenuCheckboxItem checked={priorityFilter === 'medium'} onCheckedChange={() => setPriorityFilter('medium')}>Medium</DropdownMenuCheckboxItem>
+                <DropdownMenuCheckboxItem checked={priorityFilter === 'low'} onCheckedChange={() => setPriorityFilter('low')}>Low</DropdownMenuCheckboxItem>
+                <DropdownMenuLabel>Status</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuCheckboxItem checked={statusFilter === 'all'} onCheckedChange={() => setStatusFilter('all')}>All</DropdownMenuCheckboxItem>
+                <DropdownMenuCheckboxItem checked={statusFilter === 'pending'} onCheckedChange={() => setStatusFilter('pending')}>Pending</DropdownMenuCheckboxItem>
+                <DropdownMenuCheckboxItem checked={statusFilter === 'completed'} onCheckedChange={() => setStatusFilter('completed')}>Completed</DropdownMenuCheckboxItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
         </div>
 
         <TabsContent value="tasks">
           <TaskList
-            tasks={filteredTasksForTomorrow} // Use the fully filtered list for tomorrow
+            tasks={filteredTasksForTomorrow}
             onToggleComplete={toggleTaskCompletion}
-            onArchive={archiveTask} // Changed from onDelete
+            onArchive={archiveTask}
             onGetAiSuggestion={fetchAiTimelineSuggestion}
             onEditTask={handleOpenEditModal}
             emptyStateMessage={tasksForTomorrow.length > 0 ? "No tasks match your current filters for tomorrow." : "No tasks planned for tomorrow yet. Add your first task!"}
           />
         </TabsContent>
-        <TabsContent value="schedule">
-          {/* ScheduleView should use tasksForTomorrow which is already filtered for non-archived */}
-          <ScheduleView tasks={tasksForTomorrow} /> 
+        <TabsContent value="day-schedule">
+          <div className="flex flex-col md:flex-row gap-6 items-start">
+            <div className="w-full md:w-auto mx-auto md:mx-0">
+              <Calendar
+                mode="single"
+                selected={calendarSelectedDate}
+                onSelect={(date) => setCalendarSelectedDate(date || new Date())} // Ensure a date is always set
+                className="rounded-md border bg-card shadow-sm"
+                
+              />
+            </div>
+            <div className="flex-1 w-full">
+              <ScheduleView 
+                tasks={tasksForCalendarDate} 
+                displayDate={calendarSelectedDate} 
+              />
+            </div>
+          </div>
         </TabsContent>
       </Tabs>
 
@@ -201,3 +226,5 @@ export default function PlannerPage() {
     </div>
   );
 }
+
+    

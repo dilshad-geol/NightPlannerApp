@@ -4,29 +4,44 @@
 import type { Task } from '@/lib/types';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { AlertTriangle, CalendarCheck2, CheckCircle2, Clock } from 'lucide-react';
-import { format, parseISO } from 'date-fns';
+import { format, parseISO, isToday, isTomorrow } from 'date-fns';
 import { PriorityBadge } from './PriorityBadge';
 import { cn } from '@/lib/utils';
 
 interface ScheduleViewProps {
-  tasks: Task[]; // These tasks should already be filtered (non-archived)
-  title?: string;
+  tasks: Task[];
+  displayDate: Date; // Date this schedule is for
 }
 
-export function ScheduleView({ tasks, title = "Next Day's Schedule" }: ScheduleViewProps) {
-  // tasks prop should already be filtered by the parent (e.g., PlannerPage via getTasksForTomorrow)
-  // to exclude archived tasks.
+export function ScheduleView({ tasks, displayDate }: ScheduleViewProps) {
+  // tasks prop should already be filtered by the parent for the displayDate
+  // and to exclude archived tasks.
+
+  let titleText = `Schedule for ${format(displayDate, 'MMMM d, yyyy')}`;
+  if (isToday(displayDate)) {
+    titleText = `Today's Schedule (${format(displayDate, 'MMM d')})`;
+  } else if (isTomorrow(displayDate)) {
+    titleText = `Tomorrow's Schedule (${format(displayDate, 'MMM d')})`;
+  }
+
+  let emptyMessage = `No tasks scheduled for ${format(displayDate, 'MMMM d')}.`;
+  if (isToday(displayDate)) {
+    emptyMessage = "No tasks scheduled for today.";
+  } else if (isTomorrow(displayDate)) {
+    emptyMessage = "No tasks scheduled for tomorrow yet.";
+  }
+
 
   if (!tasks.length) {
     return (
-      <Card className="mt-8">
+      <Card className="mt-0 md:mt-0 shadow-lg"> {/* Adjusted margin for flex layout */}
         <CardHeader>
           <CardTitle className="flex items-center text-xl font-semibold text-foreground/90">
-             <CalendarCheck2 className="mr-2 h-6 w-6 text-primary" /> {title}
+             <CalendarCheck2 className="mr-2 h-6 w-6 text-primary" /> {titleText}
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-muted-foreground">No tasks scheduled for tomorrow yet. Add some tasks to see your plan!</p>
+          <p className="text-muted-foreground">{emptyMessage}</p>
         </CardContent>
       </Card>
     );
@@ -35,10 +50,10 @@ export function ScheduleView({ tasks, title = "Next Day's Schedule" }: ScheduleV
   const sortedTasks = [...tasks].sort((a, b) => parseISO(a.dueDate).getTime() - parseISO(b.dueDate).getTime());
 
   return (
-    <Card className="mt-8 shadow-lg">
+    <Card className="mt-0 md:mt-0 shadow-lg"> {/* Adjusted margin for flex layout */}
       <CardHeader>
         <CardTitle className="flex items-center text-xl font-semibold text-foreground/90">
-           <CalendarCheck2 className="mr-2 h-6 w-6 text-primary" /> {title}
+           <CalendarCheck2 className="mr-2 h-6 w-6 text-primary" /> {titleText}
         </CardTitle>
       </CardHeader>
       <CardContent>
@@ -71,3 +86,5 @@ export function ScheduleView({ tasks, title = "Next Day's Schedule" }: ScheduleV
     </Card>
   );
 }
+
+    

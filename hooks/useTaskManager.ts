@@ -132,6 +132,8 @@ export function useTaskManager() {
     getTaskById,
     getTasksForTomorrow,
     getTasksForToday,
+    getTasksForDate, // Added getTasksForDate here
     fetchAiTimelineSuggestion,
   };
 }
+
